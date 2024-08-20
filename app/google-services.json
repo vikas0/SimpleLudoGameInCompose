@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "584615984334",
+    "project_id": "simplifiedludogame",
+    "storage_bucket": "simplifiedludogame.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:584615984334:android:3087ff333047b42371649f",
+        "android_client_info": {
+          "package_name": "com.example.simplifiedludogame"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUE5oEaFgIeXyW-RWE7iV_rsu3DXUE6tM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
