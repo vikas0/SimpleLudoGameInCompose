@@ -1,455 +1,148 @@
 package com.example.simplifiedludogame.uiCompose
 
-import androidx.compose.foundation.Canvas
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.times
 import com.example.simplifiedludogame.GameViewModel
-import com.example.simplifiedludogame.Player
+import com.example.simplifiedludogame.model.TokenColor
 
 @Composable
-fun LudoBoard(gameViewModel: GameViewModel ) {
-    val currentPlayer by gameViewModel.currentPlayer.observeAsState(Player.RED)
-    val diceRoll by gameViewModel.diceRoll.observeAsState(1)
-    val isGameOver by gameViewModel.isGameOver.observeAsState(false)
-    val playerPieces = gameViewModel.playerPieces
+fun LudoBoard(viewModel: GameViewModel) {
 
-    val cellSize = 30.dp
+    // To access context for Toast
+    val context = LocalContext.current
 
-    Column {
-        // Display current player
-        Text("Current Player: ${currentPlayer.name}", Modifier.padding(16.dp))
+    // State to track the toast message
+    var toastMessage by remember { mutableStateOf<String?>(null) }
 
-        // Display dice roll
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    // Effect to show the toast when the message is set
+    LaunchedEffect(toastMessage) {
+
+        toastMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            toastMessage = null // Reset the message after showing the toast
+        }
+    }
+
+
+    // Observe the token positions using LiveData
+    val redTokenPositions = viewModel.redTokenPositions.observeAsState(listOf())
+    val greenTokenPositions = viewModel.greenTokenPositions.observeAsState(listOf())
+    val yellowTokenPositions = viewModel.yellowTokenPositions.observeAsState(listOf())
+    val blueTokenPositions = viewModel.blueTokenPositions.observeAsState(listOf())
+
+    val diceRoll = viewModel.currentDiceRoll.value
+    val currentPlayer = viewModel.currentPlayer
+
+    val safeCells = viewModel.safeCells
+    val redSafeCell = viewModel.redAt0
+    val greenSafeCell = viewModel.greenAt0
+    val yellowSafeCell = viewModel.yellowAt0
+    val blueSafeCell = viewModel.blueAt0
+
+
+    // Define the size for each grid item (e.g., 40.dp per cell)
+    val gridItemSize = 40.dp
+    val boardHeight = gridItemSize * 15 // Height of the board (15 rows)
+
+
+    // Enable scrolling both vertically and horizontally
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(15), // 15x15 board using GridCells.Fixed
+            modifier = Modifier
+                .fillMaxWidth() // Take the full width of the screen
+                .height(boardHeight) // Set fixed height for the grid to allow scrolling
+
         ) {
-            Text("Dice Roll: $diceRoll", Modifier.padding(16.dp))
+            items(15 * 15) { index ->
+                val row = index / 15
+                val column = index % 15
+                val position = row to column
 
-            // Show a colored circle representing the dice roll
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .background(playerColor(currentPlayer), CircleShape)
-            )
-        }
+                // Determine the color for each cell
+                val color = when {
+                     position == viewModel.redAt0 -> Color.Red.copy(alpha = 0.4f) // Light red for red safe cell
+                    position == viewModel.greenAt0 -> Color.Green.copy(alpha = 0.4f) // Light green for green safe cell
+                    position == viewModel.yellowAt0 -> Color.Yellow.copy(alpha = 0.4f) // Light yellow for yellow safe cell
+                    position == viewModel.blueAt0 -> Color.Blue.copy(alpha = 0.4f) // Light blue for blue safe cell
 
-        // Button to roll dice
-        Button(onClick = { gameViewModel.rollDice() }, Modifier.padding(8.dp)) {
-            Text("Roll Dice")
-        }
+                    position in safeCells -> Color.LightGray // Color for general safe cells
 
-        // Handle game over
-        if (isGameOver) {
-            Text(
-                "Game Over! Winner: ${gameViewModel.playerScores.maxByOrNull { it.value }?.key?.name}",
-                Modifier.padding(16.dp)
-            )
-        }
 
-        // Display the Ludo board with paths and home areas
-        Box(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Column {
-                Row {
-                    HomeArea(Color.Red, cellSize)
-                    LudoPathVerticalWhite(cellSize = cellSize)
-                    LudoPathVerticalMiddleGreen(cellSize = cellSize)
-                    LudoPathVerticalSecondTop(pathColor = Color.Green, cellSize = cellSize)
-                    HomeArea(Color.Green, cellSize)
+                    position in viewModel.redSpecificPath.map { it.first } -> Color.Red
+                    position in viewModel.greenSpecificPath.map { it.first } -> Color.Green
+                    position in viewModel.yellowSpecificPath.map { it.first } -> Color.Yellow
+                    position in viewModel.blueSpecificPath.map { it.first } -> Color.Blue
+                    position in viewModel.generalPath.map { it.first } -> Color.Gray
+
+
+                    else -> Color.Transparent
                 }
-                Row {
-                    LudoColumnLeft(cellSize = cellSize)
-                    CenterSquareWithPaths(cellSize)
-                    LudoColumnRight(cellSize = cellSize)
-                }
-                Row {
-                    HomeArea(Color.Blue, cellSize)
-                    LudoPathVerticalSecondBottom(pathColor = Color.Blue, cellSize = cellSize)
-                    LudoPathVerticalMiddleBlue(cellSize = cellSize)
-                    LudoPathVerticalWhite(cellSize = cellSize)
-                    HomeArea(Color.Yellow, cellSize)
-                }
-            }
+                // Get all tokens in this position
+                val tokensInCell = getTokensInCell(viewModel, position)
 
-            playerPieces.forEach { (player, pieces) ->
-                pieces.forEach { position ->
-                    val (x, y) = getCellCoordinates(player, position, cellSize)
-                    Box(
-                        modifier = Modifier
-                            .size(cellSize - 10.dp)
-                            .offset(x, y)
-                            .background(playerColor(player), CircleShape)
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .border(1.dp, Color.Black) // Adding border around each cell
+
+                        .background(color = color)
+                        .clickable {
+
+                            viewModel.onCellClick(position, tokensInCell)
+
+                        }
+                ) {
+                    // Draw tokens at their current positions
+                    when (position) {
+                        in redTokenPositions.value!! -> TokenView(Color.Red)
+                        in greenTokenPositions.value!! -> TokenView(Color.Green)
+                        in yellowTokenPositions.value!! -> TokenView(Color.Yellow)
+                        in blueTokenPositions.value!! -> TokenView(Color.Blue)
+                    }
                 }
             }
-
         }
-    }
+
+
+
 }
 
-@Composable
-fun getCellCoordinates(player: Player, position: Int, cellSize: Dp): Pair<Dp, Dp> {
-    return when (player) {
-        Player.RED -> {
-            when (position) {
-                in 0..5 -> Pair((1 + position).times( cellSize), 6 * cellSize) // Horizontal move from (6, 1) to (6, 6)
-                in 6..11 -> Pair(6 * cellSize, (6 - (position - 6)) * cellSize) // Vertical move up from (6, 6) to (0, 6)
-                in 12..17 -> Pair((6 + (position - 12)) * cellSize, 0 * cellSize) // Horizontal move from (0, 6) to (0, 11)
-                else -> Pair(0.dp, 0.dp)  // Default
-            }
-        }
-        Player.GREEN -> {
-            when (position) {
-                in 0..5 -> Pair(8 * cellSize, (1 + position) * cellSize) // Vertical move down from (1, 8) to (6, 8)
-                in 6..11 -> Pair((8 + (position - 6)) * cellSize, 6 * cellSize) // Horizontal move from (6, 8) to (6, 11)
-                in 12..17 -> Pair(14 * cellSize, (6 + (position - 12)) * cellSize) // Vertical move from (6, 11) to (11, 11)
-                else -> Pair(0.dp, 0.dp)  // Default
-            }
-        }
-        Player.BLUE -> {
-            when (position) {
-                in 0..5 -> Pair(6 * cellSize, (13 - position) * cellSize) // Vertical move up from (13, 6) to (8, 6)
-                in 6..11 -> Pair((6 - (position - 6)) * cellSize, 8 * cellSize) // Horizontal move left from (8, 6) to (8, 1)
-                in 12..17 -> Pair(0 * cellSize, (8 - (position - 12)) * cellSize) // Vertical move from (8, 1) to (3, 1)
-                else -> Pair(0.dp, 0.dp)  // Default
-            }
-        }
-        Player.YELLOW -> {
-            when (position) {
-                in 0..5 -> Pair((13 - position) * cellSize, 8 * cellSize) // Horizontal move left from (8, 13) to (8, 8)
-                in 6..11 -> Pair(8 * cellSize, (8 - (position - 6)) * cellSize) // Vertical move up from (8, 8) to (3, 8)
-                in 12..17 -> Pair((8 - (position - 12)) * cellSize, 0 * cellSize) // Horizontal move left from (3, 8) to (3, 3)
-                else -> Pair(0.dp, 0.dp)  // Default
-            }
-        }
-        else -> Pair(0.dp, 0.dp)  // Default return for non-matching cases
-    }
+// Helper function to get all tokens in a cell
+private fun getTokensInCell(viewModel: GameViewModel, position: Pair<Int, Int>): List<TokenColor> {
+    val tokensInCell = mutableListOf<TokenColor>()
+    if (position in viewModel.redTokenPositions.value!!) tokensInCell.add(TokenColor.RED)
+    if (position in viewModel.greenTokenPositions.value!!) tokensInCell.add(TokenColor.GREEN)
+    if (position in viewModel.yellowTokenPositions.value!!) tokensInCell.add(TokenColor.YELLOW)
+    if (position in viewModel.blueTokenPositions.value!!) tokensInCell.add(TokenColor.BLUE)
+    return tokensInCell
 }
 
 
 @Composable
-fun LudoColumnLeft(cellSize: Dp) {
-    Column {
-        LudoPathHorizontalSecondLeftRed(cellSize)
-        LudoPathHorizontalMiddleRed(cellSize)
-        LudoPathHorizontalWhite(cellSize)
-    }
-}
-
-@Composable
-fun LudoColumnRight(cellSize: Dp) {
-    Column {
-        LudoPathHorizontalWhite(cellSize)
-        LudoPathHorizontalMiddleYellow(cellSize)
-        LudoPathHorizontalSecondRightYellow(cellSize)
-    }
-}
-
-@Composable
-fun LudoPathVerticalWhite(cellSize: Dp) {
-    Column {
-        repeat(6) {
+fun TokenStackView(tokens: List<TokenColor>) {
+    Row(modifier = Modifier.padding(4.dp)) {
+        tokens.forEach { tokenColor ->
             Box(
                 modifier = Modifier
-                    .size(cellSize)
-                    .background(Color.White)
-                    .border(1.dp, Color.Black)
+                    .size(12.dp) // Smaller size for multiple tokens
+                    .background(color = when (tokenColor) {
+                        TokenColor.RED -> Color.Red
+                        TokenColor.GREEN -> Color.Green
+                        TokenColor.YELLOW -> Color.Yellow
+                        TokenColor.BLUE -> Color.Blue
+                    })
             )
         }
     }
 }
-
-@Composable
-fun LudoPathVerticalMiddleGreen(cellSize: Dp) {
-    Column {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            1, 2, 3, 4, 5 -> Color.Green
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathVerticalMiddleBlue(cellSize: Dp) {
-    Column {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            0, 1, 2, 3, 4 -> Color.Blue
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathVerticalSecondTop(pathColor: Color, cellSize: Dp) {
-    Column {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            1 -> pathColor
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathVerticalSecondBottom(pathColor: Color, cellSize: Dp) {
-    Column {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            4 -> pathColor
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathHorizontalWhite(cellSize: Dp) {
-    Row {
-        repeat(6) {
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(Color.White)
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathHorizontalMiddleRed(cellSize: Dp) {
-    Row {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            1, 2, 3, 4, 5 -> Color.Red
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathHorizontalSecondLeftRed(cellSize: Dp) {
-    Row {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            1 -> Color.Red
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathHorizontalMiddleYellow(cellSize: Dp) {
-    Row {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            0, 1, 2, 3, 4 -> Color.Yellow
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun LudoPathHorizontalSecondRightYellow(cellSize: Dp) {
-    Row {
-        repeat(6) { index ->
-            Box(
-                modifier = Modifier
-                    .size(cellSize)
-                    .background(
-                        when (index) {
-                            4 -> Color.Yellow
-                            else -> Color.White
-                        }
-                    )
-                    .border(1.dp, Color.Black)
-            )
-        }
-    }
-}
-
-@Composable
-fun CenterSquareWithPaths(cellSize: Dp) {
-    Box(
-        modifier = Modifier
-            .size(cellSize * 3)
-            .background(Color.White)
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val sizeInPx = cellSize.toPx() * 3
-            val halfSizeInPx = sizeInPx / 2
-
-            // Top Triangle (Green)
-            drawPath(
-                path = Path().apply {
-                    moveTo(0f, 0f) // Top-left
-                    lineTo(sizeInPx, 0f) // Top-right
-                    lineTo(halfSizeInPx, halfSizeInPx) // Center
-                    close()
-                },
-                color = Color.Green
-            )
-
-            // Right Triangle (Yellow)
-            drawPath(
-                path = Path().apply {
-                    moveTo(sizeInPx, 0f) // Top-right
-                    lineTo(sizeInPx, sizeInPx) // Bottom-right
-                    lineTo(halfSizeInPx, halfSizeInPx) // Center
-                    close()
-                },
-                color = Color.Yellow
-            )
-
-            // Bottom Triangle (Blue)
-            drawPath(
-                path = Path().apply {
-                    moveTo(sizeInPx, sizeInPx) // Bottom-right
-                    lineTo(0f, sizeInPx) // Bottom-left
-                    lineTo(halfSizeInPx, halfSizeInPx) // Center
-                    close()
-                },
-                color = Color.Blue
-            )
-
-            // Left Triangle (Red)
-            drawPath(
-                path = Path().apply {
-                    moveTo(0f, sizeInPx) // Bottom-left
-                    lineTo(0f, 0f) // Top-left
-                    lineTo(halfSizeInPx, halfSizeInPx) // Center
-                    close()
-                },
-                color = Color.Red
-            )
-        }
-    }
-}
-
-@Composable
-fun getCellColor(cellIndex: Int): Color {
-    val safeCells = setOf(1, 9, 14, 22, 27, 35, 40, 48) // Define safe cells
-
-    return when (cellIndex) {
-        in safeCells -> Color.LightGray
-        else -> Color.White
-    }
-}
-
-fun playerColor(player: Player): Color {
-    return when (player) {
-        Player.RED -> Color.Red
-        Player.GREEN -> Color.Green
-        Player.BLUE -> Color.Blue
-        Player.YELLOW -> Color.Yellow
-    }
-}
-
-@Composable
-fun HomeArea(color: Color, cellSize: Dp) {
-    Box(
-        modifier = Modifier
-            .size(cellSize * 6)
-            .background(color)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceEvenly,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(horizontalArrangement = Arrangement.SpaceEvenly) {
-                PlayerPiece(color, cellSize)
-                PlayerPiece(color, cellSize)
-            }
-            Row(horizontalArrangement = Arrangement.SpaceEvenly) {
-                PlayerPiece(color, cellSize)
-                PlayerPiece(color, cellSize)
-            }
-        }
-    }
-}
-
-@Composable
-fun PlayerPiece(color: Color, size: Dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(Color.White, CircleShape)
-            .padding(4.dp)
-            .background(color, CircleShape)
-    )
-}
-
