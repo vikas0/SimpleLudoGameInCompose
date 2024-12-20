@@ -1,8 +1,9 @@
 {
   "project_info": {
     "project_number": "584615984334",
+    "firebase_url": "https://simplifiedludogame-default-rtdb.firebaseio.com",
     "project_id": "simplifiedludogame",
-    "storage_bucket": "simplifiedludogame.appspot.com"
+    "storage_bucket": "simplifiedludogame.firebasestorage.app"
   },
   "client": [
     {
@@ -12,7 +13,28 @@
           "package_name": "com.example.simplifiedludogame"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "584615984334-adkrs5flv6ejhk7ft51uebs1qg74elh0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.simplifiedludogame",
+            "certificate_hash": "9c17d3787e2651fda813806909bfc21d63a65619"
+          }
+        },
+        {
+          "client_id": "584615984334-btulbsg319edishoqqathu7725snu9hp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.simplifiedludogame",
+            "certificate_hash": "0f9985f7c2f8b23d465072ea62ce566082d079e4"
+          }
+        },
+        {
+          "client_id": "584615984334-gf1litf0a8hgscace1q3b4ehd7otu8ss.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDUE5oEaFgIeXyW-RWE7iV_rsu3DXUE6tM"
@@ -20,7 +42,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "584615984334-gf1litf0a8hgscace1q3b4ehd7otu8ss.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

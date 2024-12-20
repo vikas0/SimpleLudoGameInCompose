@@ -1,17 +1,209 @@
 package com.example.simplifiedludogame
 
 import android.annotation.SuppressLint
+import android.util.Log
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.simplifiedludogame.model.GameState
+import com.example.simplifiedludogame.model.GameStateObject
 import com.example.simplifiedludogame.model.Player
 import com.example.simplifiedludogame.model.TokenColor
+import com.example.simplifiedludogame.model.toMap
 import com.example.simplifiedludogame.preference.PreferenceHelper
 
-class GameViewModel (private val preferenceHelper: PreferenceHelper): ViewModel() {
-    // Safe cells where tokens can't be eliminated
-    // Color-specific safe cells (initial positions for each token)
+import com.google.gson.Gson
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import javax.inject.Inject
+
+@HiltViewModel
+class GameViewModel @Inject constructor(
+    private val repository: GameRepository,
+    private val preferenceHelper: PreferenceHelper
+) :ViewModel()
+{
+
+    private val _gameState = mutableStateOf<GameState>(GameState.Loading)
+    val gameState: State<GameState> get() = _gameState
+
+
+
+    public fun determineInitialState() {
+        Log.d("ViewModel", "Determining initial state...")
+        _gameState.value = GameState.Loading
+        if (playersSelected) {
+            Log.d("ViewModel", "Players are selected. Checking for saved game...")
+
+            viewModelScope.launch {
+                withTimeoutOrNull(5000) {
+                    checkIfGameIsSaved()
+                } ?: run {
+                    Log.e("ViewModel", "Timeout while fetching saved game.")
+                    _gameState.value = GameState.InGame(isResumed  = false)
+                }
+            }
+        } else {
+            Log.d("ViewModel", "No players selected. Going to PlayerSelection state.")
+            _gameState.value = GameState.PlayerSelection
+        }
+    }
+
+    private fun checkIfGameIsSaved() {
+        repository.getSavedGame { savedState, error ->
+            Log.d("ViewModel", "Saved state fetched: $savedState, error: $error")
+            this.savedState = savedState
+            if (error != null || savedState == null) {
+                Log.d("ViewModel", "No saved state found or error occurred. Starting a new game.")
+                _gameState.value = GameState.InGame(isResumed = false)
+            } else {
+                Log.d("ViewModel", "Saved state found. Showing dialog.")
+                _gameState.value = GameState.ShowSavedGameDialog
+            }
+        }
+    }
+
+
+
+
+    fun startNewGame() {
+        resetGameState()
+        _gameState.value = GameState.InGame(isResumed = false)
+    }
+
+    fun resumeGame() {
+        restoreGameState(savedState ?: emptyMap())
+        _gameState.value = GameState.InGame(isResumed = true)
+    }
+
+    fun resetToPlayerSelection() {
+        clearPlayersSelected()
+        _gameState.value = GameState.PlayerSelection
+    }
+
+
+  var  savedState: Map<String, Any>? = null
+
+    val playersSelected: Boolean
+        get() = preferenceHelper.getPlayerCount() > 0
+
+    fun clearPlayersSelected() {
+        preferenceHelper.clearPlayersSelected()
+    }
+
+    private fun restoreGameState(savedState: Map<String, Any>) {
+        // Restore red token positions
+        redTokenPositions.value = (savedState["redTokenPositions"] as? List<Map<String, Any>>)?.map {
+            val first = (it["first"] as? Number)?.toInt() ?: 0
+            val second = (it["second"] as? Number)?.toInt() ?: 0
+            Pair(first, second)
+        } ?: emptyList()
+
+        // Restore green token positions
+        greenTokenPositions.value = (savedState["greenTokenPositions"] as? List<Map<String, Any>>)?.map {
+            val first = (it["first"] as? Number)?.toInt() ?: 0
+            val second = (it["second"] as? Number)?.toInt() ?: 0
+            Pair(first, second)
+        } ?: emptyList()
+
+// Restore yellow token positions
+        yellowTokenPositions.value = (savedState["yellowTokenPositions"] as? List<Map<String, Any>>)?.map {
+            val first = (it["first"] as? Number)?.toInt() ?: 0
+            val second = (it["second"] as? Number)?.toInt() ?: 0
+            Pair(first, second)
+        } ?: emptyList()
+
+// Restore blue token positions
+        blueTokenPositions.value = (savedState["blueTokenPositions"] as? List<Map<String, Any>>)?.map {
+            val first = (it["first"] as? Number)?.toInt() ?: 0
+            val second = (it["second"] as? Number)?.toInt() ?: 0
+            Pair(first, second)
+        } ?: emptyList()
+
+
+        // Restore current player index
+        currentPlayerIndex.value = (savedState["currentPlayerIndex"] as? Number?)?.toInt() ?: 0
+        // Restore last dice roll
+        lastDiceRoll.value = (savedState["lastDiceRoll"] as? Number)?.toInt() ?: 0
+
+        // Restore current dice roll
+        currentDiceRoll.value = (savedState["currentDiceRoll"] as? Number)?.toInt() ?: 0
+
+        // Restore dice roll disabled state
+        isDiceRollDisabled.value = (savedState["isDiceRollDisabled"] as? Boolean) ?: false
+
+
+        // Restore game over status
+        isGameOver.value = (savedState["isGameOver"] as? Boolean) ?: false
+
+        if(isGameOver.value)
+        {
+            winner.value = (savedState["winner"] as? String)
+        }
+
+        // Restore players
+        val playerDataList = savedState["players"] as? List<Map<String, Any>> ?: emptyList()
+        _players.clear()
+        _players.addAll(playerDataList.map {
+            Player(
+                color = TokenColor.valueOf(it["color"] as? String ?: "RED"),
+                score = (it["score"] as? Long)?.toInt() ?: 0,
+                turnsTaken = (it["turnsTaken"] as? Long)?.toInt() ?: 0,
+                hasExtraTurn = it["hasExtraTurn"] as? Boolean ?: false
+            )
+        })
+        // Restore turns taken
+        turnsTaken.value = (savedState["turnsTaken"] as? Long)?.toInt() ?: 0}
+
+    private fun resetGameState() {
+       resetGame()
+    }
+
+
+
+        fun saveGameState() {
+            val gameState = collectGameState().toMap()
+            val currentStateJson = Gson().toJson(gameState)  // Convert to JSON or preferred format
+            val lastSyncedState = preferenceHelper.getLastSyncedState() // Retrieve the last synced state
+
+            // Compare the current state with the last synced state
+            if (currentStateJson != lastSyncedState) {
+                repository.saveGameState(gameState) { isSuccess, message->
+                    if (isSuccess) {
+                        preferenceHelper.saveLastSyncedState(currentStateJson) // Save the new state
+                        toastMessage.value = "Game state saved successfully!"
+                    } else {
+                        toastMessage.value = "Failed to save game state. Error = $message"
+                    }
+                }
+            }
+        }
+
+    private fun collectGameState(): GameStateObject {
+        return GameStateObject(
+            redTokenPositions = redTokenPositions.value ?: emptyList(),
+            greenTokenPositions = greenTokenPositions.value ?: emptyList(),
+            yellowTokenPositions = yellowTokenPositions.value ?: emptyList(),
+            blueTokenPositions = blueTokenPositions.value ?: emptyList(),
+            currentPlayerIndex = currentPlayerIndex.value,
+            lastDiceRoll = lastDiceRoll.value,
+            currentDiceRoll = currentDiceRoll.value,
+            isDiceRollDisabled = isDiceRollDisabled.value,
+            isGameOver = isGameOver.value,
+            winner = winner?.value?:"",
+            players = _players.toList(),
+            turnsTaken = turnsTaken.value
+        )
+    }
+
+
+
     val redAt0 = Pair(6, 1)
     val greenAt0 = Pair(1, 8)
     val yellowAt0 = Pair(8, 13)
@@ -85,7 +277,7 @@ class GameViewModel (private val preferenceHelper: PreferenceHelper): ViewModel(
 
     // Disable roll dice button after the game ends
     var isGameOver = mutableStateOf(false)
-    var winner = mutableStateOf<Player?>(null)  // Track the winner
+    var winner = mutableStateOf<String?>(null)  // Track the winner
     // Track the toast message
     var toastMessage = mutableStateOf<String?>(null)
 
@@ -162,7 +354,8 @@ class GameViewModel (private val preferenceHelper: PreferenceHelper): ViewModel(
             // Check if the player can move based on the dice roll and token positions
             if (!canPlayerMove(currentPlayer, currentDiceRoll.value!!)) {
                 // If the player cannot move, immediately go to the next player
-                moveToNextPlayer()
+
+                completeTurn()
 
             }
 
@@ -184,7 +377,7 @@ class GameViewModel (private val preferenceHelper: PreferenceHelper): ViewModel(
     // Move to the next player after their turn
     fun moveToNextPlayer() {
         currentPlayerIndex.value = (currentPlayerIndex.value + 1) % _players.size
-        // Reset the dice roll if moving to the next player
+        // Reset the dice roll icollectGameStatef moving to the next player
         lastDiceRoll.value = currentDiceRoll.value
         currentDiceRoll.value = 0 // Reset dice roll after the player moves to the next
         isDiceRollDisabled.value = false
@@ -328,18 +521,32 @@ class GameViewModel (private val preferenceHelper: PreferenceHelper): ViewModel(
     }
 
     fun resetGame() {
+        // Reset token positions
         redTokenPositions.value = redHomePositions
         greenTokenPositions.value = greenHomePositions
         yellowTokenPositions.value = yellowHomePositions
         blueTokenPositions.value = blueHomePositions
 
+        // Reset players' states
         _players.forEach { player ->
             player.score = 0
             player.hasExtraTurn = false
+            player.turnsTaken = 0
         }
 
+        // Reset game variables
         currentPlayerIndex.value = 0
+        lastDiceRoll.value = 0
         currentDiceRoll.value = 0
+        isDiceRollDisabled.value = false
+        isGameOver.value = false
+        turnsTaken.value = 0
+
+        // Clear any winner
+        winner.value = null
+
+        // Optionally, log or display a message
+        toastMessage.value = "Game has been reset. Ready to play!"
     }
 
 
@@ -452,7 +659,7 @@ fun isTokenInHome(tokenColor: TokenColor, position: Pair<Int, Int>): Boolean {
         // Declare winner if all tokens are in the final position
         if (allTokensInFinalPosition) {
             isGameOver.value = true
-            winner.value = _players.first { it.color == tokenColor }
+            winner.value = _players.first { it.color == tokenColor }?.color?.name
             toastMessage.value = "${tokenColor.name} wins!"
         }
 
@@ -502,8 +709,9 @@ fun isTokenInHome(tokenColor: TokenColor, position: Pair<Int, Int>): Boolean {
 
     private fun endGame() {
         isGameOver.value = true
-        winner.value = _players.maxByOrNull { it.score }
-        toastMessage.value = "Game Over! Winner: ${winner.value?.color?.name} with ${winner.value?.score} points!"
+        val winnerPLayer = _players.maxByOrNull { it.score }
+        winner.value = winnerPLayer?.color?.name
+        toastMessage.value = "Game Over! Winner: ${winner} with ${winnerPLayer?.score} points!"
     }
 
     private fun canPlayerMove(player: Player, diceRoll: Int): Boolean {
@@ -546,19 +754,7 @@ fun isTokenInHome(tokenColor: TokenColor, position: Pair<Int, Int>): Boolean {
         }
     }
 
-//    fun onCellClick(position: Pair<Int, Int>, tokensInCell: List<TokenColor>) {
-//        // Ensure the current player has a token in this cell
-//        val currentPlayerColor = currentPlayer.color
-//        if (currentPlayerColor in tokensInCell) {
-//            if (tokensInCell.size > 1) {
-//                toastMessage.value = "Multiple tokens here. Select your token to move."
-//            }
-//            // Proceed with movement logic for the current player's token
-//            moveToken(currentPlayerColor, position, currentDiceRoll.value!!)
-//        } else {
-//            toastMessage.value = "Invalid move! Select your own token."
-//        }
-//    }
+
 
     fun onCellClick(position: Pair<Int, Int>, tokensInCell: List<TokenColor>) {
         val currentPlayer = currentPlayer
@@ -630,6 +826,29 @@ fun isTokenInHome(tokenColor: TokenColor, position: Pair<Int, Int>): Boolean {
         return currentTokens
     }
 
+    var tokens = mutableStateOf(0)
 
+    // Collect free tokens
+    fun collectTokens(amount: Int) {
+        tokens.value += amount
+    }
+
+    // Method to spend tokens
+    fun spendTokens(amount: Int) {
+        val current = tokens.value ?: 0
+        // Only spend if the user has enough tokens
+        if (current >= amount) {
+            tokens.value = current - amount
+        }
+        // If there's a scenario where you need to handle insufficient tokens
+        // more directly here, you can add additional logic,
+        // or simply rely on the UI check before calling this.
+    }
+
+    // Handle payment for tokens (simulated)
+    fun buyTokens(amount: Int) {
+        // Simulated purchase process
+        tokens.value += amount
+    }
 
 }

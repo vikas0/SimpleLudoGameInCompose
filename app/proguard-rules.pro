@@ -19,3 +19,24 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Firebase
+-keep class com.google.firebase.** { *; }
+-keep class com.google.gson.** { *; }
+
+# Gson
+-keep class com.google.gson.* { *; }
+-keep class * {
+    @com.google.gson.annotations.SerializedName *;
+}
+
+# Prevent obfuscation of model classes
+-keepclassmembers class com.example.simplifiedludogame.model.** {
+    *;
+}
+
+# General Android rules
+-keepattributes Exceptions, Signature, InnerClasses
+-keep class androidx.lifecycle.** { *; }
+-keep class androidx.compose.** { *; }
+-keep class com.android.volley.** { *; }
